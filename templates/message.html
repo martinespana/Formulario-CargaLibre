@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block body %}<div class="panel"><h1>{{title}}</h1><p>{{message}}</p>{% if admin_link %}<a href="{{url_for('login')}}">Acceso de administración</a>{% endif %}</div>{% endblock %}

@@ -1,0 +1,10 @@
+[Unit]
+Description=Copia externa cifrada de CargaLibre
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cargalibre
+ExecStart=/bin/sh /opt/cargalibre/backup-daily.sh
+# Configure OnFailure con el servicio de alertas elegido por la organización.
