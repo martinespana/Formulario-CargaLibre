@@ -6,7 +6,7 @@ Aplicación de servidor con formulario móvil, enlaces individuales de un solo u
 
 Se conserva la declaración aceptada, autorización y su versión, respuestas normalizadas, firma dibujada, hora UTC del servidor, IP observada, navegador e identificador interno del enlace. El celular se declara; no se verifica su titularidad. La IP tampoco identifica por sí sola a una persona. El enlace puede ser reenviado: debe entregarse individualmente por el canal habitual del despachador.
 
-Un expediente finalizado no tiene rutas de edición o borrado. Disparadores de base de datos bloquean UPDATE/DELETE. Cada JSON y PDF tiene huella SHA-256 y un sello Ed25519 que se verifica antes de entregarlo. El PDF descargado se puede alterar con herramientas externas, pero dejaría de coincidir con el original y fallaría su verificación. El administrador funcional no puede modificar el expediente. Una persona con acceso raíz a la VPS sí puede atacar archivos y claves: para evidencia resistente a ese riesgo conserve la clave pública y copias con Object Lock fuera de la VPS. El sello del servidor no es un certificado de firma digital emitido por una entidad de certificación.
+Un expediente finalizado no tiene rutas de edición o borrado. Disparadores de base de datos bloquean UPDATE/DELETE. Cada JSON y PDF tiene huella SHA-256 y un sello Ed25519 que se verifica antes de entregarlo. El PDF descargado se puede alterar con herramientas externas, pero dejaría de coincidir con el original y fallaría su verificación. El administrador funcional no puede modificar el expediente. Una persona con acceso raíz a la VPS sí puede atacar archivos y claves: para evidencia resistente a ese riesgo conserve la clave pública y copias fuera de la VPS. El sello del servidor no es un certificado de firma digital emitido por una entidad de certificación.
 
 ## Arranque local
 
@@ -39,20 +39,25 @@ El volumen `records` contiene la base y la clave de firma. **Nunca use `docker c
 
 `TRUST_PROXY=yes` está diseñado para **un solo proxy Caddy**. El proxy sobrescribe X-Forwarded-For con la IP del cliente. Si añade Cloudflare u otro proxy deberá configurar explícitamente su cadena de confianza; no acepte IPs arbitrarias enviadas por el navegador. El entorno local registra 127.0.0.1. Mantenga NTP activo en la VPS.
 
-## Copias externas y restauración
+## Copias y restauración
 
-Un volumen en la misma VPS no es una copia externa. El mecanismo está implementado, pero necesita una cuenta/bucket privado externo y sus credenciales para activarse. Nunca almacene registros reales hasta probar la copia y su restauración.
+Las copias son locales: se guardan cifradas en `/data/backups` dentro del volumen `records`, en la misma VPS. **No protegen contra la pérdida de la VPS**: descárguelas periódicamente a otro equipo.
 
 1. Genere una clave de respaldo Fernet:
    `docker compose exec app python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`
-2. Guarde BACKUP_ENCRYPTION_KEY en `.env` **y en un gestor de contraseñas externo**. Perderla impide restaurar. Configure BACKUP_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION y S3_ENDPOINT_URL cuando corresponda. Use permisos mínimos para leer/escribir únicamente el prefijo `cargalibre/` del bucket; evite permisos de borrado.
-3. Para conservar versiones protegidas habilite versionado y Object Lock en el bucket. Puede definir BACKUP_LOCK_DAYS con un período revisado para la organización. El script usa COMPLIANCE; no habilite retención irreversible sin aprobar el plazo.
-4. Recree los contenedores para cargar las nuevas variables: `docker compose up -d`.
-5. `docker compose exec -T app python backup.py --upload`
+2. Guarde BACKUP_ENCRYPTION_KEY en `.env` **y en un gestor de contraseñas externo**. Perderla impide restaurar.
+3. Recree los contenedores para cargar la variable: `docker compose up -d`.
+4. `docker compose exec -T app python backup.py`
 
-El script hace una instantánea consistente de SQLite (incluye PDFs y evidencias), verifica sellos e historial, cifra también la clave de firma, sube el archivo y vuelve a descargarlo para comparar los bytes. No informa éxito si falla la carga. La copia local previa es temporal y no reemplaza la externa.
+El script hace una instantánea consistente de SQLite (incluye PDFs y evidencias), verifica sellos e historial y cifra también la clave de firma.
 
-Programe `/opt/cargalibre/backup-daily.sh` diariamente en la VPS y configure un monitor que alerte cuando falle o no exista una copia reciente. Se incluyen unidades systemd de ejemplo en `deploy/`. Mantenga espacio suficiente para las copias temporales y una política de conservación revisada. Pruebe una restauración mensualmente en un directorio aislado y registre el resultado.
+Programe `/opt/cargalibre/backup-daily.sh` diariamente en la VPS (unidades systemd de ejemplo en `deploy/`). Cada copia nueva borra las de más de 14 días (`KEEP_DAYS` en backup.py). Para bajar las copias a su equipo:
+
+```sh
+docker compose cp app:/data/backups ./backups
+```
+
+Pruebe una restauración mensualmente en un directorio aislado y registre el resultado.
 
 Exporte la clave pública del servidor y consérvela fuera de la VPS:
 
@@ -93,4 +98,4 @@ python verify.py --evidence expediente-evidencia.json --pdf expediente.pdf --pub
 python -m unittest discover -s tests -v
 ```
 
-Se prueban guardado, rechazo de datos incompletos y teléfonos inválidos, CSRF, acceso privado, expiración y revocación, idempotencia del envío, filtros, inmutabilidad, detección de alteraciones, copia cifrada y restauración real. No se ha realizado despliegue en una VPS ni carga S3 externa sin las cuentas correspondientes.
+Se prueban guardado, rechazo de datos incompletos y teléfonos inválidos, CSRF, acceso privado, expiración y revocación, idempotencia del envío, filtros, inmutabilidad, detección de alteraciones, copia cifrada y restauración real. No se ha realizado despliegue en una VPS.

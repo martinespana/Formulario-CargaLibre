@@ -2,7 +2,7 @@ import base64,copy,io,json,os,re,sqlite3,sys,tempfile,unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app import create_app
-from backup import backup,restore
+from backup import backup,prune,restore
 from verify import check_database,check_envelope
 from cryptography.fernet import Fernet
 from werkzeug.security import generate_password_hash
@@ -69,6 +69,11 @@ class PlatformTests(unittest.TestCase):
   self.assertEqual(check_database(out/'cargalibre.sqlite3',self.app.config['PUBLIC_KEY'])['records'],1)
   with self.assertRaises(ValueError):restore(file,key,out,self.app.config['PUBLIC_KEY'])
   with self.assertRaises(Exception):restore(file,Fernet.generate_key(),self.root/'wrong-key',self.app.config['PUBLIC_KEY'])
+ def test_prune_keeps_recent_backups(self):
+  old=self.root/'cargalibre-old.enc';new=self.root/'cargalibre-new.enc';other=self.root/'nota.txt'
+  for f in (old,new,other):f.write_bytes(b'x')
+  os.utime(old,(0,0));os.utime(other,(0,0));prune(self.root)
+  self.assertFalse(old.exists());self.assertTrue(new.exists());self.assertTrue(other.exists())
  def test_fail_closed_production(self):
   with self.assertRaises(RuntimeError):create_app({'DATA_DIR':str(self.root/'prod'),'PRODUCTION':True,'SECRET_KEY':'secret','POLICY_APPROVED':False})
 if __name__=='__main__':unittest.main()
