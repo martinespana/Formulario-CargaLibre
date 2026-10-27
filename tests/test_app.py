@@ -26,7 +26,7 @@ class PlatformTests(unittest.TestCase):
   link=self.link();self.assertEqual(self.driver.get(link).status_code,302);ctx=self.driver.get('/api/context').json;self.token=ctx['csrf'];self.version=ctx['version'];return link
  def data(self):
   image=Image.new('RGB',(1000,360),'white');ImageDraw.Draw(image).line([(50,100),(500,200),(850,50)],fill='black',width=5);out=io.BytesIO();image.save(out,format='PNG')
-  return {'nombre':'conductor de prueba','documento':'PRUEBA001','telefono':'0000000000','tipoDocumento':'Otro','ciudad':'bogotá','direccion':'prueba','rol':'Conductor','tramite':'Nuevo','placa':'zzz000','modelo':'2020','tipoVehiculo':'NHR','trailer':'DO NOT KEEP','propio':'Sí','tenedor':'No','contacto':'ficticio','parentesco':'hermano','contactoTel':'0000000000','empresaA':'prueba a','empresaATel':'0000000000','empresaB':'prueba b','empresaBTel':'0000000000','version':self.version,'consent':True,'declaration':True,'signature':'data:image/png;base64,'+base64.b64encode(out.getvalue()).decode()}
+  return {'nombre':'conductor de prueba','documento':'PRUEBA001','telefono':'0000000000','tipoDocumento':'Otro','ciudad':'bogotá','direccion':'prueba','pep':'No','relacionCargaLibre':'Sí','rol':'Conductor','tramite':'Nuevo','placa':'zzz000','modelo':'2020','tipoVehiculo':'NHR','trailer':'DO NOT KEEP','propio':'Sí','tenedor':'No','contacto':'ficticio','parentesco':'hermano','contactoTel':'0000000000','empresaA':'prueba a','empresaATel':'0000000000','empresaB':'prueba b','empresaBTel':'0000000000','version':self.version,'consent':True,'declaration':True,'signature':'data:image/png;base64,'+base64.b64encode(out.getvalue()).decode()}
  def submit(self,data=None):return self.driver.post('/api/submit',json=data or self.data(),headers={'X-CSRF-Token':self.token,'User-Agent':'Automated fictitious test','X-Forwarded-For':'203.0.113.2'})
  def test_full_flow_integrity_filters_and_immutability(self):
   link=self.setup_driver();self.assertEqual(self.driver.post('/api/draft',json={'nombre':'prueba'},headers={'X-CSRF-Token':self.token}).status_code,200)
@@ -40,6 +40,12 @@ class PlatformTests(unittest.TestCase):
   envelope=self.admin.get('/admin/records/'+ident+'/evidence').json
   self.assertEqual(envelope['payload']['data']['nombre'],'CONDUCTOR DE PRUEBA');self.assertNotIn('trailer',envelope['payload']['data']);self.assertFalse(envelope['payload']['evidence']['phone_verified']);self.assertEqual(envelope['payload']['evidence']['ip'],'127.0.0.1')
   self.assertNotIn('/f/',json.dumps(envelope))
+  self.assertEqual(envelope['payload']['data']['pep'],'NO')
+  self.assertEqual(envelope['payload']['data']['relacionCargaLibre'],'SÍ')
+  self.assertEqual(envelope['payload']['schema_version'],2)
+  receipt=self.driver.get(res.json['receipt']).text
+  self.assertIn('¿USTED ES UNA PERSONA EXPUESTA POLÍTICAMENTE (PEP)?',receipt)
+  self.assertIn('CONTRAPARTE ACTIVA DE CARGA LIBRE?',receipt)
   pdf=self.driver.get(res.json['receipt']+'/pdf').data;check_envelope(envelope,self.app.config['PUBLIC_KEY'],pdf)
   bad=copy.deepcopy(envelope);bad['payload']['data']['nombre']='ALTERADO'
   with self.assertRaises(Exception):check_envelope(bad,self.app.config['PUBLIC_KEY'],pdf)
@@ -74,6 +80,32 @@ class PlatformTests(unittest.TestCase):
   for f in (old,new,other):f.write_bytes(b'x')
   os.utime(old,(0,0));os.utime(other,(0,0));prune(self.root)
   self.assertFalse(old.exists());self.assertTrue(new.exists());self.assertTrue(other.exists())
+ def test_additional_declarations_reject_missing_or_invalid_values(self):
+  self.setup_driver()
+  for field in ['pep','relacionCargaLibre']:
+   for invalid in [None,'','Tal vez',True,False,0,'SI']:
+    with self.subTest(field=field,value=invalid):
+     data=self.data()
+     if invalid is None:data.pop(field)
+     else:data[field]=invalid
+     self.assertEqual(self.submit(data).status_code,400)
+  conn=sqlite3.connect(self.app.config['DB_PATH'])
+  self.assertEqual(conn.execute('SELECT COUNT(*) FROM records').fetchone()[0],0);conn.close()
+ def test_additional_declarations_accept_yes_no_combinations(self):
+  for pep,relation in [('Sí','Sí'),('Sí','No'),('No','Sí'),('No','No')]:
+   with self.subTest(pep=pep,relation=relation):
+    self.setup_driver();data=self.data();data.update(pep=pep,relacionCargaLibre=relation)
+    result=self.submit(data);self.assertEqual(result.status_code,200,result.text)
+    evidence=self.admin.get('/admin/records/'+result.json['id']+'/evidence').json
+    self.assertEqual(evidence['payload']['data']['pep'],pep.upper())
+    self.assertEqual(evidence['payload']['data']['relacionCargaLibre'],relation.upper())
+    check_envelope(evidence,self.app.config['PUBLIC_KEY'],self.driver.get(result.json['receipt']+'/pdf').data)
+ def test_additional_declarations_draft_and_form_version(self):
+  self.setup_driver()
+  self.assertEqual(self.driver.post('/api/draft',json={'pep':'Sí','relacionCargaLibre':'No'},headers={'X-CSRF-Token':self.token}).status_code,200)
+  self.assertEqual(self.driver.get('/api/context').json['draft'],{'pep':'SÍ','relacionCargaLibre':'NO'})
+  data=self.data();data['version']='obsolete-form-version'
+  self.assertEqual(self.submit(data).status_code,409)
  def test_fail_closed_production(self):
   with self.assertRaises(RuntimeError):create_app({'DATA_DIR':str(self.root/'prod'),'PRODUCTION':True,'SECRET_KEY':'secret','POLICY_APPROVED':False})
 if __name__=='__main__':unittest.main()

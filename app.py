@@ -15,9 +15,10 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
 DECLARATION = 'Declaro que soy la persona identificada en este formulario, que lo he diligenciado personalmente y que la información suministrada es veraz. Confirmo que he revisado su contenido y que la firma registrada corresponde a mi manifestación de aceptación.'
+FORM_VERSION = 2
 COMPANIES = 'COOPERATIVA CARGA LIBRE Y CARGA LIBRE S.A.S.'
 POLICY = 'Autorizo a Cooperativa Carga Libre y Carga Libre S.A.S. a tratar los datos suministrados para la evaluación y vinculación de conductores terceros, verificación de referencias y seguridad de las operaciones de transporte. He podido consultar la política de tratamiento de datos y los canales para ejercer mis derechos.'
-LABELS = {'nombre':'NOMBRES Y APELLIDOS','documento':'DOCUMENTO','tipoDocumento':'TIPO DE DOCUMENTO','telefono':'CELULAR DECLARADO (SIN VERIFICACIÓN TÉCNICA)','ciudad':'CIUDAD','direccion':'DIRECCIÓN','rol':'QUIEN DILIGENCIA','tramite':'TIPO DE REGISTRO','placa':'PLACA','modelo':'MODELO','tipoVehiculo':'TIPO DE VEHÍCULO','trailer':'PLACA TRÁILER','propio':'¿ES EL PROPIETARIO?','tenedor':'¿EXISTE OTRO TENEDOR?','propNombre':'PROPIETARIO','propTipoDocumento':'TIPO DE DOCUMENTO PROPIETARIO','propDocumento':'DOCUMENTO PROPIETARIO','propTelefono':'TELÉFONO PROPIETARIO','propCiudad':'CIUDAD PROPIETARIO','propDireccion':'DIRECCIÓN PROPIETARIO','tenNombre':'TENEDOR','tenDocumento':'DOCUMENTO TENEDOR','tenTelefono':'TELÉFONO TENEDOR','tenCiudad':'CIUDAD TENEDOR','tenDireccion':'DIRECCIÓN TENEDOR','contacto':'CONTACTO DE EMERGENCIA','parentesco':'PARENTESCO','contactoTel':'TELÉFONO DE EMERGENCIA','contacto2':'SEGUNDO CONTACTO','parentesco2':'PARENTESCO SEGUNDO CONTACTO','contacto2Tel':'TELÉFONO SEGUNDO CONTACTO','empresaA':'REFERENCIA A','empresaATel':'TELÉFONO REFERENCIA A','empresaB':'REFERENCIA B','empresaBTel':'TELÉFONO REFERENCIA B'}
+LABELS = {'nombre':'NOMBRES Y APELLIDOS','documento':'DOCUMENTO','tipoDocumento':'TIPO DE DOCUMENTO','telefono':'CELULAR DECLARADO (SIN VERIFICACIÓN TÉCNICA)','ciudad':'CIUDAD','direccion':'DIRECCIÓN','pep':'¿USTED ES UNA PERSONA EXPUESTA POLÍTICAMENTE (PEP)?','relacionCargaLibre':'¿USTED O LA EMPRESA QUE REPRESENTA ES FAMILIAR O TIENE ALGUNA RELACIÓN CON ALGÚN COLABORADOR, CLIENTE, PROVEEDOR O CONTRAPARTE ACTIVA DE CARGA LIBRE?','rol':'QUIEN DILIGENCIA','tramite':'TIPO DE REGISTRO','placa':'PLACA','modelo':'MODELO','tipoVehiculo':'TIPO DE VEHÍCULO','trailer':'PLACA TRÁILER','propio':'¿ES EL PROPIETARIO?','tenedor':'¿EXISTE OTRO TENEDOR?','propNombre':'PROPIETARIO','propTipoDocumento':'TIPO DE DOCUMENTO PROPIETARIO','propDocumento':'DOCUMENTO PROPIETARIO','propTelefono':'TELÉFONO PROPIETARIO','propCiudad':'CIUDAD PROPIETARIO','propDireccion':'DIRECCIÓN PROPIETARIO','tenNombre':'TENEDOR','tenDocumento':'DOCUMENTO TENEDOR','tenTelefono':'TELÉFONO TENEDOR','tenCiudad':'CIUDAD TENEDOR','tenDireccion':'DIRECCIÓN TENEDOR','contacto':'CONTACTO DE EMERGENCIA','parentesco':'PARENTESCO','contactoTel':'TELÉFONO DE EMERGENCIA','contacto2':'SEGUNDO CONTACTO','parentesco2':'PARENTESCO SEGUNDO CONTACTO','contacto2Tel':'TELÉFONO SEGUNDO CONTACTO','empresaA':'REFERENCIA A','empresaATel':'TELÉFONO REFERENCIA A','empresaB':'REFERENCIA B','empresaBTel':'TELÉFONO REFERENCIA B'}
 
 def canonical(obj): return json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
 def digest(value): return hashlib.sha256(value.encode() if isinstance(value,str) else value).hexdigest()
@@ -188,7 +189,7 @@ def create_app(test_config=None):
     def form_page():invite();return render_template('form.html')
     @app.get('/api/context')
     def context():
-        row=invite();return jsonify(csrf=csrf(),branch=row['branch'],dispatcher=row['dispatcher'],created_at=row['created_at'],server_time=now(),expected={'nombre':row['expected_name'],'documento':row['expected_document'],'telefono':row['expected_phone']},draft=json.loads(row['draft']) if row['draft'] else {},version=digest(canonical([DECLARATION,POLICY,app.config['POLICY_URL']])),declaration=DECLARATION,policy=POLICY,policy_url=app.config['POLICY_URL'],production=app.config['PRODUCTION'])
+        row=invite();return jsonify(csrf=csrf(),branch=row['branch'],dispatcher=row['dispatcher'],created_at=row['created_at'],server_time=now(),expected={'nombre':row['expected_name'],'documento':row['expected_document'],'telefono':row['expected_phone']},draft=json.loads(row['draft']) if row['draft'] else {},version=digest(canonical([FORM_VERSION,DECLARATION,POLICY,app.config['POLICY_URL']])),declaration=DECLARATION,policy=POLICY,policy_url=app.config['POLICY_URL'],production=app.config['PRODUCTION'])
     @app.post('/api/draft')
     def draft():
         row=invite();raw=request.get_json(silent=True)
@@ -200,7 +201,7 @@ def create_app(test_config=None):
         if not isinstance(raw,dict):abort(400,description='Datos inválidos.')
         data={k:str(v).strip().upper() for k,v in raw.items() if k in LABELS and isinstance(v,(str,int)) and not isinstance(v,bool)}
         if any(len(v)>200 or any(ord(c)<32 for c in v) for v in data.values()):abort(400,description='Hay campos demasiado largos o caracteres inválidos.')
-        required=['nombre','tipoDocumento','documento','telefono','ciudad','direccion','rol','tramite','placa','modelo','tipoVehiculo','propio','tenedor','contacto','parentesco','contactoTel','empresaA','empresaATel','empresaB','empresaBTel']
+        required=['nombre','tipoDocumento','documento','telefono','ciudad','direccion','pep','relacionCargaLibre','rol','tramite','placa','modelo','tipoVehiculo','propio','tenedor','contacto','parentesco','contactoTel','empresaA','empresaATel','empresaB','empresaBTel']
         if data.get('propio')=='NO':required+=['propNombre','propTipoDocumento','propDocumento','propTelefono','propCiudad','propDireccion']
         else:
             for k in list(data):
@@ -211,7 +212,7 @@ def create_app(test_config=None):
                 if k.startswith('ten') and k!='tenedor':data.pop(k)
         if any(data.get(k) for k in ['contacto2','parentesco2','contacto2Tel']):required+=['contacto2','parentesco2','contacto2Tel']
         if any(not data.get(k) for k in required):abort(400,description='Complete todos los campos obligatorios y los datos del segundo contacto si lo incluye.')
-        enums={'rol':['CONDUCTOR','PROPIETARIO','TENEDOR'],'tramite':['NUEVO','ACTUALIZACIÓN'],'tipoVehiculo':['NHR','TURBO','SENCILLO','DOBLETROQUE','PATINETA','MULA'],'propio':['SÍ','NO'],'tenedor':['SÍ','NO'],'tipoDocumento':['CÉDULA DE CIUDADANÍA','CÉDULA DE EXTRANJERÍA','OTRO','NIT']}
+        enums={'pep':['SÍ','NO'],'relacionCargaLibre':['SÍ','NO'],'rol':['CONDUCTOR','PROPIETARIO','TENEDOR'],'tramite':['NUEVO','ACTUALIZACIÓN'],'tipoVehiculo':['NHR','TURBO','SENCILLO','DOBLETROQUE','PATINETA','MULA'],'propio':['SÍ','NO'],'tenedor':['SÍ','NO'],'tipoDocumento':['CÉDULA DE CIUDADANÍA','CÉDULA DE EXTRANJERÍA','OTRO','NIT']}
         if any(data.get(k) not in opts for k,opts in enums.items()):abort(400,description='Selección no válida.')
         if data.get('propio')=='NO' and data.get('propTipoDocumento') not in ['NIT','CÉDULA DE CIUDADANÍA']:abort(400,description='Documento de propietario inválido.')
         if data['rol']=='PROPIETARIO' and data['tipoDocumento'] not in ['NIT','CÉDULA DE CIUDADANÍA']:abort(400,description='Documento de propietario inválido.')
@@ -233,7 +234,7 @@ def create_app(test_config=None):
         if row['expires']<time.time():abort(410)
         rate('submit:'+row['id'],20,3600)
         raw=request.get_json(silent=True);data=validate(raw,row)
-        if raw.get('version')!=digest(canonical([DECLARATION,POLICY,app.config['POLICY_URL']])):abort(409,description='El texto del formulario cambió. Recargue y revíselo antes de firmar.')
+        if raw.get('version')!=digest(canonical([FORM_VERSION,DECLARATION,POLICY,app.config['POLICY_URL']])):abort(409,description='El texto del formulario cambió. Recargue y revíselo antes de firmar.')
         sig=raw.get('signature','')
         if not isinstance(sig,str) or not sig.startswith('data:image/png;base64,') or len(sig)>500000:abort(400,description='Firma inválida.')
         try:
@@ -247,7 +248,7 @@ def create_app(test_config=None):
                 out=io.BytesIO();bg.convert('RGB').save(out,format='PNG');png=out.getvalue()
         except Exception:abort(400,description='Dibuje una firma válida en el recuadro.')
         ident='CL-'+uuid.uuid4().hex.upper();stamp=now()
-        payload={'schema_version':1,'id':ident,'created_at':stamp,'companies':COMPANIES,'branch':row['branch'],'dispatcher':row['dispatcher'],'invite_id':row['id'],'expected_identity':{'name':row['expected_name'],'document':row['expected_document'],'phone':row['expected_phone']},'data':data,'authorization':{'version':'1','text':POLICY,'url':app.config['POLICY_URL'],'accepted':True},'declaration':{'version':'1','text':DECLARATION,'accepted':True},'evidence':{'ip':request.remote_addr or '','user_agent':request.headers.get('User-Agent','')[:500],'method':'ENLACE INDIVIDUAL Y DECLARACIÓN PERSONAL','phone_verified':False},'signature_png':base64.b64encode(png).decode()}
+        payload={'schema_version':FORM_VERSION,'id':ident,'created_at':stamp,'companies':COMPANIES,'branch':row['branch'],'dispatcher':row['dispatcher'],'invite_id':row['id'],'expected_identity':{'name':row['expected_name'],'document':row['expected_document'],'phone':row['expected_phone']},'data':data,'authorization':{'version':'1','text':POLICY,'url':app.config['POLICY_URL'],'accepted':True},'declaration':{'version':'1','text':DECLARATION,'accepted':True},'evidence':{'ip':request.remote_addr or '','user_agent':request.headers.get('User-Agent','')[:500],'method':'ENLACE INDIVIDUAL Y DECLARACIÓN PERSONAL','phone_verified':False},'signature_png':base64.b64encode(png).decode()}
         pdf=make_pdf(payload,png);pdf_hash=digest(pdf);body_hash=digest(canonical(payload));manifest={'payload_hash':body_hash,'pdf_hash':pdf_hash,'id':ident};seal=sign(manifest)
         conn=db();conn.execute('BEGIN IMMEDIATE')
         try:

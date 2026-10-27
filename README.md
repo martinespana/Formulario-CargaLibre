@@ -99,3 +99,21 @@ python -m unittest discover -s tests -v
 ```
 
 Se prueban guardado, rechazo de datos incompletos y teléfonos inválidos, CSRF, acceso privado, expiración y revocación, idempotencia del envío, filtros, inmutabilidad, detección de alteraciones, copia cifrada y restauración real. No se ha realizado despliegue en una VPS.
+
+## Preguntas adicionales del formulario (versión 2)
+
+Al final de los datos de quien diligencia se solicitan, sin respuesta preseleccionada y de forma obligatoria:
+
+- ¿Usted es una Persona Expuesta Políticamente (PEP)? **Sí / No**.
+- ¿Usted o la empresa que representa es familiar o tiene alguna relación con algún colaborador, cliente, proveedor o contraparte activa de CARGA LIBRE? **Sí / No**.
+
+Las dos respuestas se validan también en el servidor, se conservan en mayúsculas en el expediente sellado y se muestran en el resumen previo a la firma, comprobante del administrador y PDF. No se modifica la estructura de la base de datos ni se alteran formularios ya firmados; los anteriores conservan su contenido original sin atribuirles respuestas que no dieron. Si un formulario estaba abierto durante la actualización, debe recargarse y revisarse antes de firmar.
+
+Para actualizar una instalación existente, desde la carpeta de despliegue y conservando su `.env` y volumen de datos:
+
+```sh
+git pull --ff-only origin main
+docker compose up -d --build
+```
+
+Estos comandos actualizan la aplicación; no ejecutan migraciones ni borran expedientes.
